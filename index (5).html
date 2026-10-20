@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Treat Toss Trainer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Creepster&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: game stage on top (canvas), controls + effort meter beside it, launch log below; one challenge per class day */
+:root{
+  --bg:#f6f1fb; --surface:#ffffff; --ink:#24152f; --muted:#6a5878;
+  --pumpkin:#e2620f; --plum:#5b2a86; --line:#dccfe8; --good:#1f7a4d; --bad:#b3261e; --sky:#e9e0f3; --ground:#8a7a63;
+  --display:"Creepster","Impact",fantasy; --body:"Atkinson Hyperlegible",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#150d1d; --surface:#21162c; --ink:#f3ecf8; --muted:#b5a5c4; --pumpkin:#ff8a3d; --plum:#c39bf0; --line:#3b2c4a; --good:#5fd39a; --bad:#ff8278; --sky:#1d1428; --ground:#6b5d4a; color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#150d1d; --surface:#21162c; --ink:#f3ecf8; --muted:#b5a5c4; --pumpkin:#ff8a3d; --plum:#c39bf0; --line:#3b2c4a; --good:#5fd39a; --bad:#ff8278; --sky:#1d1428; --ground:#6b5d4a; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:clamp(16px,1.4vw,20px);line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1150px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-weight:400;color:var(--pumpkin);font-size:clamp(40px,6vw,76px);line-height:1;margin:0;letter-spacing:.02em}
+.tag{font-family:var(--mono);font-size:.7em;letter-spacing:.12em;text-transform:uppercase;color:var(--plum)}
+nav{display:flex;gap:8px;flex-wrap:wrap}
+nav button{font:700 .8em var(--body);padding:8px 14px;border-radius:999px;border:2px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+nav button[aria-current="true"]{border-color:var(--plum);background:var(--plum);color:var(--bg)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--pumpkin);outline-offset:2px}
+.mission{background:var(--surface);border:2px solid var(--plum);border-radius:12px;padding:14px 20px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;justify-content:space-between}
+.mission h2{margin:0;font-size:1.2em}
+.mission p{margin:0;max-width:70ch}
+.score{font-family:var(--mono);font-weight:700;color:var(--pumpkin);font-variant-numeric:tabular-nums;white-space:nowrap}
+.game{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px}
+@media (max-width:820px){.game{grid-template-columns:1fr}}
+.stage{background:var(--surface);border:2px solid var(--line);border-radius:12px;overflow:hidden;min-width:0}
+canvas{display:block;width:100%;height:auto}
+.msg{padding:10px 16px;font-weight:700;min-height:2.6em;border-top:2px solid var(--line)}
+.msg.good{color:var(--good)} .msg.bad{color:var(--bad)}
+.panel{background:var(--surface);border:2px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.ctl label{display:flex;justify-content:space-between;font-weight:700;font-size:.9em}
+.ctl label span{font-family:var(--mono);color:var(--plum)}
+.ctl small{color:var(--muted);font-size:.75em;display:block}
+input[type=range]{width:100%;accent-color:var(--pumpkin)}
+select{width:100%;font:inherit;padding:6px 8px;border-radius:8px;border:2px solid var(--line);background:var(--bg);color:var(--ink)}
+.meter{height:16px;border-radius:8px;background:var(--bg);border:2px solid var(--line);position:relative;overflow:hidden}
+.meter i{position:absolute;inset:0 auto 0 0;background:var(--good);transition:width .15s}
+.meter i.over{background:var(--bad)}
+.meter b{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--ink)}
+.btn{font:700 1em var(--body);padding:12px 18px;border-radius:10px;border:2px solid var(--pumpkin);background:var(--pumpkin);color:#fff;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{background:transparent;color:var(--plum);border-color:var(--plum);font-size:.8em;padding:8px 14px}
+.log{background:var(--surface);border:2px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.log h3{margin:0;font-family:var(--mono);font-size:.8em;letter-spacing:.1em;text-transform:uppercase;color:var(--plum)}
+.logtop{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.85em;font-variant-numeric:tabular-nums}
+th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;white-space:nowrap}
+th{font-family:var(--mono);font-size:.72em;letter-spacing:.05em;text-transform:uppercase;color:var(--plum);background:var(--bg)}
+td.g{color:var(--good);font-weight:700} td.b{color:var(--bad);font-weight:700}
+.empty{color:var(--muted);font-style:italic}
+.think{color:var(--muted);font-size:.9em;margin:0}
+.think b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="tag">Treat Toss practice · daily challenge</div>
+      <h1>Treat Toss Trainer</h1>
+    </div>
+    <nav aria-label="Daily challenge"></nav>
+  </header>
+
+  <div class="mission">
+    <div><h2 id="mTitle"></h2><p id="mText"></p></div>
+    <div class="score" id="scoreBox"></div>
+  </div>
+
+  <div class="game">
+    <div class="stage">
+      <canvas id="cv" width="900" height="360" aria-label="Side view of Mr. Jones's door, the treat toss, and the sidewalk with a measuring tape"></canvas>
+      <div class="msg" id="msg" aria-live="polite">Set the fulcrum and the pull, then launch.</div>
+    </div>
+    <div class="panel">
+      <div class="ctl">
+        <label for="fulcrum">Fulcrum position <span id="fVal"></span></label>
+        <input type="range" id="fulcrum" min="1" max="9" step="1" value="5">
+        <small>Hole 1 is next to the candy cup. Hole 9 is next to where you push.</small>
+      </div>
+      <div class="ctl">
+        <label for="pull">How hard you pull <span id="pVal"></span></label>
+        <input type="range" id="pull" min="1" max="10" step="1" value="5">
+        <small>1 = gentle tap, 10 = full rubber band stretch</small>
+      </div>
+      <div class="ctl" id="candyCtl">
+        <label for="candy">Candy</label>
+        <select id="candy">
+          <option value="kiss">Hershey's Kiss</option>
+          <option value="corn">Candy corn</option>
+          <option value="twix">Mini Twix</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label>Effort for Mr. Jones <span id="eVal"></span></label>
+        <div class="meter"><i id="eBar"></i><b id="eLimit"></b></div>
+        <small id="eNote"></small>
+      </div>
+      <button class="btn" type="button" id="launch">Launch</button>
+      <button class="btn ghost" type="button" id="reset">Start this challenge over</button>
+    </div>
+  </div>
+
+  <div class="log">
+    <div class="logtop"><h3>Launch log</h3><span class="think" id="best"></span></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Candy</th><th>Fulcrum</th><th>Pull</th><th>Effort</th><th>Distance</th><th>Target</th><th>Off by</th></tr></thead>
+      <tbody id="logBody"><tr><td colspan="8" class="empty">No launches yet. Your data shows up here, just like the recorder's log.</td></tr></tbody>
+    </table></div>
+    <p class="think" id="think"></p>
+  </div>
+</div>
+
+<script>
+const CANDY={kiss:{name:"Kiss",mass:1,wobble:.04},corn:{name:"Candy corn",mass:.65,wobble:.12},twix:{name:"Mini Twix",mass:2,wobble:.04}};
+const MODES=[
+  {id:"tue",tab:"Tue · Fulcrum Lab",title:"Fulcrum Lab",text:"Kisses only. Find the farthest launch Mr. Jones can still do without going over his effort limit. Change one thing at a time.",limit:100,candy:"kiss",target:"none",rounds:0,
+   think:"<b>Think:</b> What happens to the distance AND the effort as you move the fulcrum toward the push side?"},
+  {id:"wed",tab:"Wed · Candy Swap",title:"Candy Swap",text:"The trick-or-treater is standing at 20 inches. Hit the target with all three candies. Which candy needs the most pull?",limit:100,candy:"any",target:"fixed",fixed:20,rounds:0,
+   think:"<b>Think:</b> Why does the mini Twix need different settings than the Kiss?"},
+  {id:"thu",tab:"Thu · Sidewalk Delivery",title:"Sidewalk Delivery",text:"5 launches. A new kid shows up at a different spot each time. Land the candy as close as you can. Bullseye (within 1 in.) = 10 points.",limit:100,candy:"any",target:"random",lo:8,hi:40,rounds:5,
+   think:"<b>Think:</b> Did you use your earlier data to choose settings, or guess?"},
+  {id:"fri",tab:"Fri · Weak Day",title:"Mr. Jones's Weak Day",text:"Mr. Jones feels worse today, so his effort limit drops to 70. 5 launches at random kids. Can you still reach the far ones?",limit:70,candy:"any",target:"random",lo:6,hi:28,rounds:5,
+   think:"<b>Think:</b> With less strength, how did you change the fulcrum or the candy to keep your distance?"}
+];
+const $=id=>document.getElementById(id);
+const cv=$("cv"),ctx=cv.getContext("2d");
+let mode=MODES[0],log=[],target=null,score=0,busy=false,anim=null;
+
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function ratio(f){return f/(10-f);}
+function effort(p,f){return Math.round(p*6*Math.sqrt(ratio(f)));}
+function distance(p,f,c){const k=CANDY[c];const base=0.6*Math.pow(p,1.5)*Math.pow(ratio(f),0.7)/Math.pow(k.mass,0.8);const w=1+(Math.random()*2-1)*k.wobble;return Math.max(0,Math.round(base*w*10)/10);}
+function pts(off){return off<=1?10:off<=3?7:off<=6?4:off<=10?1:0;}
+
+const nav=document.querySelector("nav");
+const tabs=MODES.map(m=>{const b=document.createElement("button");b.type="button";b.textContent=m.tab;b.onclick=()=>setMode(m);nav.appendChild(b);return b;});
+
+function setMode(m){
+  mode=m;tabs.forEach((t,i)=>t.setAttribute("aria-current",MODES[i]===m?"true":"false"));
+  $("mTitle").textContent=m.title;$("mText").textContent=m.text;$("think").innerHTML=m.think;
+  $("candyCtl").hidden=m.candy!=="any";if(m.candy!=="any")$("candy").value=m.candy;
+  resetGame();
+}
+function newTarget(){target=mode.target==="fixed"?mode.fixed:mode.target==="random"?Math.round(mode.lo+Math.random()*(mode.hi-mode.lo)):null;}
+function resetGame(){log=[];score=0;busy=false;cancelAnimationFrame(anim);newTarget();renderLog();updateControls();draw(null);
+  $("msg").className="msg";$("msg").textContent="Set the fulcrum and the pull, then launch.";$("launch").disabled=false;}
+function updateScore(){
+  if(mode.rounds){$("scoreBox").textContent=`Launch ${Math.min(log.length+1,mode.rounds)} of ${mode.rounds} · ${score} pts`;}
+  else if(mode.target==="none"){const ok=log.filter(r=>!r.tooHard);const b=ok.length?Math.max(...ok.map(r=>r.dist)):0;$("scoreBox").textContent=`Best: ${b.toFixed(1)} in.`;}
+  else{const hit=new Set(log.filter(r=>r.off!==null&&r.off<=1).map(r=>r.candy));$("scoreBox").textContent=`Candies on target: ${hit.size} of 3`;}
+}
+function updateControls(){
+  const f=+$("fulcrum").value,p=+$("pull").value,e=effort(p,f);
+  $("fVal").textContent="hole "+f;$("pVal").textContent=p;$("eVal").textContent=e+" / "+mode.limit;
+  const max=180;$("eBar").style.width=Math.min(100,e/max*100)+"%";$("eBar").classList.toggle("over",e>mode.limit);
+  $("eLimit").style.left=(mode.limit/max*100)+"%";
+  $("eNote").textContent=e>mode.limit?"Too hard for Mr. Jones. Move the fulcrum or pull gentler.":"Mr. Jones can do this.";
+  updateScore();if(!busy)draw(null);
+}
+["fulcrum","pull","candy"].forEach(id=>$(id).addEventListener("input",updateControls));
+
+// ---- drawing (logical 900×360)
+const G=300,X0=250,X1=880,MAXIN=60,ppi=(X1-X0)/MAXIN;
+function draw(flight){
+  const W=900,H=360;ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=css("--sky");ctx.fillRect(0,0,W,G);
+  ctx.fillStyle=css("--ground");ctx.fillRect(0,G,W,H-G);
+  // door
+  ctx.fillStyle=css("--plum");ctx.fillRect(14,130,64,170);ctx.fillStyle=css("--pumpkin");ctx.beginPath();ctx.arc(66,220,5,0,7);ctx.fill();
+  ctx.fillStyle=css("--ink");ctx.font="700 15px Atkinson Hyperlegible, sans-serif";ctx.textAlign="center";ctx.fillText("Mr. Jones",46,122);
+  // tape measure
+  ctx.fillStyle=css("--surface");ctx.fillRect(X0,G+8,X1-X0,26);
+  ctx.strokeStyle=css("--ink");ctx.fillStyle=css("--ink");ctx.lineWidth=1;ctx.font="500 13px JetBrains Mono, monospace";
+  for(let i=0;i<=MAXIN;i+=2){const x=X0+i*ppi;ctx.beginPath();ctx.moveTo(x,G+8);ctx.lineTo(x,G+8+(i%10===0?14:7));ctx.stroke();if(i%10===0)ctx.fillText(i+" in",x,G+50);}
+  // target
+  if(target!==null){const tx=X0+target*ppi;ctx.fillStyle=css("--bad");ctx.globalAlpha=.25;ctx.beginPath();ctx.ellipse(tx,G,3*ppi,6,0,0,7);ctx.fill();ctx.globalAlpha=1;
+    ctx.beginPath();ctx.ellipse(tx,G,1*ppi,4,0,0,7);ctx.fill();
+    // kid
+    ctx.fillStyle=css("--pumpkin");ctx.beginPath();ctx.arc(tx,G-62,11,0,7);ctx.fill();ctx.fillRect(tx-9,G-50,18,34);ctx.fillRect(tx-8,G-16,6,16);ctx.fillRect(tx+2,G-16,6,16);
+    ctx.fillStyle=css("--ink");ctx.font="700 14px Atkinson Hyperlegible, sans-serif";ctx.fillText(target+" in.",tx,G-82);}
+  // catapult
+  const f=+$("fulcrum").value,p=+$("pull").value;const ax=100,len=140,px=ax+f*len/10;
+  const tilt=flight?-0.32:0.08;
+  ctx.fillStyle=css("--plum");ctx.beginPath();ctx.moveTo(px,G-40);ctx.lineTo(px-18,G);ctx.lineTo(px+18,G);ctx.closePath();ctx.fill();
+  ctx.save();ctx.translate(px,G-40);ctx.rotate(tilt);
+  ctx.fillStyle=css("--ink");ctx.fillRect(ax-px,-5,len,10);
+  ctx.fillStyle=css("--pumpkin");ctx.fillRect(ax-px-4,-18,22,14);
+  if(!flight){ctx.fillStyle=css("--ink");ctx.beginPath();ctx.arc(ax-px+7,-23,6,0,7);ctx.fill();}
+  ctx.restore();
+  if(!flight){const ex=ax+len-6;ctx.strokeStyle=css("--good");ctx.fillStyle=css("--good");ctx.lineWidth=5;const al=12+p*5;
+    ctx.beginPath();ctx.moveTo(ex,G-60-al);ctx.lineTo(ex,G-58);ctx.stroke();ctx.beginPath();ctx.moveTo(ex-9,G-62);ctx.lineTo(ex+9,G-62);ctx.lineTo(ex,G-48);ctx.fill();}
+  if(flight){ctx.fillStyle=css("--ink");ctx.beginPath();ctx.arc(flight.x,flight.y,7,0,7);ctx.fill();
+    if(flight.trail){ctx.strokeStyle=css("--muted");ctx.setLineDash([4,6]);ctx.lineWidth=2;ctx.beginPath();flight.trail.forEach((q,i)=>i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y));ctx.stroke();ctx.setLineDash([]);}}
+  // landed marks
+  log.forEach((r,i)=>{if(r.tooHard)return;const x=X0+Math.min(r.dist,MAXIN+2)*ppi;ctx.fillStyle=i===log.length-1?css("--ink"):css("--muted");ctx.beginPath();ctx.arc(x,G-4,i===log.length-1?6:4,0,7);ctx.fill();});
+}
+
+function launch(){
+  if(busy)return;if(mode.rounds&&log.length>=mode.rounds)return;
+  const f=+$("fulcrum").value,p=+$("pull").value,c=$("candy").value,e=effort(p,f);
+  if(e>mode.limit){log.push({candy:c,f,p,e,dist:0,target,off:null,tooHard:true});renderLog();
+    say(`Too hard! That takes ${e} effort and Mr. Jones can only manage ${mode.limit}.`,"bad");afterShot();return;}
+  const d=distance(p,f,c);busy=true;$("launch").disabled=true;
+  const sx=100+7,sy=G-63,ex=X0+Math.min(d,MAXIN+3)*ppi,h=Math.max(30,Math.min(200,d*3.2));const t0=performance.now(),dur=matchMedia("(prefers-reduced-motion: reduce)").matches?1:900;const trail=[];
+  function step(now){const t=Math.min(1,(now-t0)/dur);const x=sx+(ex-sx)*t,y=sy+(G-6-sy)*t-4*h*t*(1-t);trail.push({x,y});draw({x,y,trail});
+    if(t<1){anim=requestAnimationFrame(step);return;}
+    const off=target===null?null:Math.round(Math.abs(d-target)*10)/10;
+    log.push({candy:c,f,p,e,dist:d,target,off,tooHard:false});
+    let gained=0;if(mode.rounds&&off!==null){gained=pts(off);score+=gained;}
+    busy=false;$("launch").disabled=false;renderLog();draw(null);
+    if(off===null)say(`Landed at ${d.toFixed(1)} inches.`,"good");
+    else if(off<=1)say(`Bullseye! ${d.toFixed(1)} in. Off by only ${off.toFixed(1)}.${gained?" +"+gained+" pts":""}`,"good");
+    else say(`Landed at ${d.toFixed(1)} in. ${d<target?"Short":"Long"} by ${off.toFixed(1)} in.${mode.rounds?" +"+gained+" pts":""}`,d<target?"bad":"bad");
+    afterShot();}
+  anim=requestAnimationFrame(step);
+}
+function afterShot(){
+  if(mode.target==="random"){if(log.length<mode.rounds){newTarget();draw(null);}
+    else{$("launch").disabled=true;say(`Challenge done: ${score} of ${mode.rounds*10} points. Record your score, then start over to beat it.`,"good");}}
+  updateScore();
+}
+function say(t,k){$("msg").textContent=t;$("msg").className="msg "+(k||"");}
+function renderLog(){
+  const b=$("logBody");if(!log.length){b.innerHTML='<tr><td colspan="8" class="empty">No launches yet. Your data shows up here, just like the recorder\'s log.</td></tr>';$("best").textContent="";return;}
+  b.innerHTML=log.map((r,i)=>`<tr><td>${i+1}</td><td>${CANDY[r.candy].name}</td><td>hole ${r.f}</td><td>${r.p}</td><td class="${r.tooHard?"b":""}">${r.e}</td><td>${r.tooHard?"too hard":r.dist.toFixed(1)+" in."}</td><td>${r.target===null?"–":r.target+" in."}</td><td class="${r.off!==null&&r.off<=1?"g":""}">${r.off===null?"–":r.off.toFixed(1)+" in."}</td></tr>`).reverse().join("");
+  const ok=log.filter(r=>!r.tooHard);if(ok.length){const best=ok.reduce((a,r)=>r.dist>a.dist?r:a);$("best").textContent=`Farthest: ${best.dist.toFixed(1)} in. (hole ${best.f}, pull ${best.p}, ${CANDY[best.candy].name})`;}
+}
+$("launch").onclick=launch;$("reset").onclick=resetGame;
+document.addEventListener("keydown",e=>{if(e.key===" "&&e.target===document.body){e.preventDefault();launch();}});
+const ids=MODES.map(m=>m.id);let s=ids.indexOf(location.hash.slice(1));
+if(s<0){const d=new Date().getDay();s={2:0,3:1,4:2,5:3}[d]??0;}
+setMode(MODES[s]);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>draw(null));
+</script>
+</body>
+</html>
